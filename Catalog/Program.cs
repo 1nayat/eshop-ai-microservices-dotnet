@@ -14,7 +14,7 @@ builder.AddNpgsqlDbContext<CatalogDbContext>(connectionName: "catalogdb");
 builder.Services.AddScoped<ProductService>();
 builder.Services.AddScoped<ProductAIService>();
 
-// 🔥 Swagger सेवाएँ
+// 🔥 Swagger 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
