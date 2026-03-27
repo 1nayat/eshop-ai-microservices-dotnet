@@ -96,7 +96,7 @@ public class ProductAIService(
             {
                 Id = (int)result.Record.Id,
                 Name = result.Record.Name,
-                Description = result.Record.Description,
+                Description = result.Record.Description, 
                 Price = (decimal)result.Record.Price,
                 ImageUrl = result.Record.ImageUrl
             });
