@@ -8,7 +8,7 @@ This project demonstrates a real-world backend architecture focusing on scalabil
 
 It is not a simple CRUD application. It showcases:
 
-Microservices with independent data stores
+Microservices with independent data stores 
 Distributed system orchestration
 Containerized infrastructure
 AI-driven search capabilities
