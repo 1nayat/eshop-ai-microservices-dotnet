@@ -29,7 +29,7 @@ public class BasketApiClient(HttpClient httpClient)
         ShoppingCart basket;
 
         try
-        {.
+        {
             basket = await GetBasket(userName);
         }
         catch

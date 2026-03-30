@@ -1,4 +1,6 @@
-﻿namespace Catalog.Services;
+﻿using Microsoft.EntityFrameworkCore;
+
+namespace Catalog.Services;
 
 public class ProductService(CatalogDbContext dbContext)
 {
@@ -20,22 +22,11 @@ public class ProductService(CatalogDbContext dbContext)
 
     public async Task UpdateProductAsync(Product updatedProduct, Product inputProduct)
     {
-        // if price has changed, raise ProductPriceChanged integration event
         if (updatedProduct.Price != inputProduct.Price)
         {
-            //// Publish product price changed integration event for update basket prices
-            //var integrationEvent = new ProductPriceChangedIntegrationEvent
-            //{
-            //    ProductId = updatedProduct.Id, // Id only comes from db entity
-            //    Name = inputProduct.Name,
-            //    Description = inputProduct.Description,
-            //    Price = inputProduct.Price, //set updated product price
-            //    ImageUrl = inputProduct.ImageUrl
-            //};
-            //await bus.Publish(integrationEvent);
+            // Integration event (optional)
         }
 
-        // update product with new values
         updatedProduct.Name = inputProduct.Name;
         updatedProduct.Description = inputProduct.Description;
         updatedProduct.ImageUrl = inputProduct.ImageUrl;
@@ -51,10 +42,23 @@ public class ProductService(CatalogDbContext dbContext)
         await dbContext.SaveChangesAsync();
     }
 
+    // 🔥 FIXED NORMAL SEARCH
     public async Task<IEnumerable<Product>> SearchProductsAsync(string query)
     {
+        // ✅ Handle empty search
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return await dbContext.Products.ToListAsync();
+        }
+
+        query = query.Trim();
+
+        // ✅ PostgreSQL optimized case-insensitive search
         return await dbContext.Products
-            .Where(p => p.Name.Contains(query))
+            .Where(p =>
+                EF.Functions.ILike(p.Name, $"%{query}%") ||
+                EF.Functions.ILike(p.Description, $"%{query}%")
+            )
             .ToListAsync();
     }
 }

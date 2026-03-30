@@ -1,8 +1,6 @@
-using System;
-using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData;
-using Microsoft.VisualBasic;
 
 namespace Catalog.Services;
 
@@ -12,6 +10,9 @@ public class ProductAIService(
     VectorStoreCollection<ulong, ProductVector> productVectorCollection,
     CatalogDbContext dbContext)
 {
+    // -----------------------------
+    // SUPPORT CHAT
+    // -----------------------------
     public async Task<string> SupportAsync(string userQuery, CancellationToken cancellationToken = default)
     {
         var products = await dbContext.Products
@@ -24,22 +25,12 @@ public class ProductAIService(
             : string.Join("\n", products.Select(p => $"- Id:{p.Id} Name:{p.Name} Price:(${p.Price})"));
 
         var systemPrompt = $"""
-            You are a helpful assistant for an outdoor camping products store.
+        You are a helpful assistant for an outdoor camping products store.
+        Only answer camping-related queries. Be concise and slightly funny.
 
-            Rules:
-            1. Only answer questions related to outdoor camping or the product catalog. If unrelated say exactly: "I only answer questions about outdoor camping products."
-            2. Be concise and a little funny (light humor).
-            3. If you don't know, reply exactly: "I don't know that."
-            4. Do not store memory of the conversation.
-            5. When appropriate (most user questions), end with ONE relevant product recommendation from the catalog below.
-               - Pick the product that best matches the user's intent; if none clearly match, pick a random one.
-               - Format the recommendation on a new final line as:
-                 Recommendation: <Product Name> - <Price>
-            6. Do NOT invent products not in the catalog.
-
-            Product Catalog:
-            {productCatalog}
-            """;
+        Product Catalog:
+        {productCatalog}
+        """;
 
         var chatHistory = new List<ChatMessage>
         {
@@ -47,61 +38,129 @@ public class ProductAIService(
             new ChatMessage(ChatRole.User, userQuery)
         };
 
-
         var response = await chatClient.GetResponseAsync(chatHistory, cancellationToken: cancellationToken);
 
-        return response.Text ?? "No description available.";
+        return response.Text ?? "No response.";
     }
 
-    private async Task InitEmbeddingsAsync()
+    // -----------------------------
+    // INIT EMBEDDINGS
+    // -----------------------------
+    private async Task InitEmbeddingsAsync(CancellationToken cancellationToken)
     {
-        await productVectorCollection.EnsureCollectionExistsAsync();
+        Console.WriteLine("Initializing embeddings...");
 
-        var products = await dbContext.Products.ToListAsync();
+        await productVectorCollection.EnsureCollectionExistsAsync(cancellationToken);
+
+        var products = await dbContext.Products.ToListAsync(cancellationToken);
 
         foreach (var product in products)
         {
-            var productInfo = $"[{product.Name}] is a product that costs [{product.Price}] and is described as {product.Description}";
+            var productInfo = $"[{product.Name}] costs [{product.Price}] and is {product.Description}";
 
-            var productVector  = new ProductVector
+            // ✅ FIXED: correct parameter order
+            var vector = await embeddingGenerator.GenerateVectorAsync(
+                productInfo,
+                options: null,
+                cancellationToken: cancellationToken
+            );
+
+            var productVector = new ProductVector
             {
                 Id = (ulong)product.Id,
                 Name = product.Name,
                 Description = product.Description,
                 Price = (double)product.Price,
                 ImageUrl = product.ImageUrl,
-                Vector = await embeddingGenerator.GenerateVectorAsync(productInfo)
+                Vector = vector
             };
 
-            await productVectorCollection.UpsertAsync(productVector);
+            await productVectorCollection.UpsertAsync(productVector, cancellationToken);
+        }
+
+        Console.WriteLine("Embeddings initialized.");
+    }
+
+    // -----------------------------
+    // MAIN SEARCH METHOD
+    // -----------------------------
+    public async Task<IEnumerable<Product>> SearchProductsAsync(string query, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            Console.WriteLine("Checking vector collection...");
+
+            if (!await productVectorCollection.CollectionExistsAsync(cancellationToken))
+            {
+                await InitEmbeddingsAsync(cancellationToken);
+            }
+
+            // 🔥 Timeout control (3 seconds)
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(3));
+
+            Console.WriteLine("Generating embedding...");
+
+            // ✅ FIXED: correct signature
+            var queryEmbedding = await embeddingGenerator.GenerateVectorAsync(
+                query,
+                options: null,
+                cancellationToken: cts.Token
+            );
+
+            Console.WriteLine("Searching vector DB...");
+
+            var results = productVectorCollection.SearchAsync(
+                queryEmbedding,
+                top: 3,
+                cancellationToken: cts.Token
+            );
+
+            List<Product> products = new();
+
+            await foreach (var result in results.WithCancellation(cts.Token))
+            {
+                products.Add(new Product
+                {
+                    Id = (int)result.Record.Id,
+                    Name = result.Record.Name,
+                    Description = result.Record.Description,
+                    Price = (decimal)result.Record.Price,
+                    ImageUrl = result.Record.ImageUrl
+                });
+
+                // limit results
+                if (products.Count >= 3)
+                    break;
+            }
+
+            // 🔥 fallback if AI gives nothing
+            if (products.Count == 0)
+            {
+                Console.WriteLine("AI returned no results, fallback to SQL...");
+                return await FallbackSearch(query, cancellationToken);
+            }
+
+            return products;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"AI Search failed: {ex.Message}");
+
+            // 🔥 fallback if ANY failure
+            return await FallbackSearch(query, cancellationToken);
         }
     }
 
-    public async Task<IEnumerable<Product>> SearchProductsAsync(string query, CancellationToken cancellationToken = default)
+    // -----------------------------
+    // FALLBACK SEARCH (SQL)
+    // -----------------------------
+    private async Task<List<Product>> FallbackSearch(string query, CancellationToken cancellationToken)
     {
-        if(!await productVectorCollection.CollectionExistsAsync())
-        {
-            await InitEmbeddingsAsync();
-        }
+        Console.WriteLine("Executing fallback SQL search...");
 
-        var queryEmbedding = await embeddingGenerator.GenerateVectorAsync(query);
-        
-        var results = productVectorCollection.SearchAsync(queryEmbedding,1);
-
-        List<Product> products = [];
-
-        await foreach (var result in results)
-        {
-            products.Add(new Product
-            {
-                Id = (int)result.Record.Id,
-                Name = result.Record.Name,
-                Description = result.Record.Description, 
-                Price = (decimal)result.Record.Price,
-                ImageUrl = result.Record.ImageUrl
-            });
-        }
-
-        return products;
+        return await dbContext.Products
+            .Where(p => p.Name.Contains(query))
+            .ToListAsync(cancellationToken);
     }
 }
