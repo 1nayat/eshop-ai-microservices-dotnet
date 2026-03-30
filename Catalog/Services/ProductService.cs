@@ -42,10 +42,9 @@ public class ProductService(CatalogDbContext dbContext)
         await dbContext.SaveChangesAsync();
     }
 
-    // 🔥 FIXED NORMAL SEARCH
     public async Task<IEnumerable<Product>> SearchProductsAsync(string query)
     {
-        // ✅ Handle empty search
+
         if (string.IsNullOrWhiteSpace(query))
         {
             return await dbContext.Products.ToListAsync();
@@ -53,7 +52,6 @@ public class ProductService(CatalogDbContext dbContext)
 
         query = query.Trim();
 
-        // ✅ PostgreSQL optimized case-insensitive search
         return await dbContext.Products
             .Where(p =>
                 EF.Functions.ILike(p.Name, $"%{query}%") ||

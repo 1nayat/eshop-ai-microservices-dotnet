@@ -58,7 +58,7 @@ public class ProductAIService(
         {
             var productInfo = $"[{product.Name}] costs [{product.Price}] and is {product.Description}";
 
-            // ✅ FIXED: correct parameter order
+            
             var vector = await embeddingGenerator.GenerateVectorAsync(
                 productInfo,
                 options: null,
@@ -95,13 +95,13 @@ public class ProductAIService(
                 await InitEmbeddingsAsync(cancellationToken);
             }
 
-            // 🔥 Timeout control (3 seconds)
+   
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(3));
 
             Console.WriteLine("Generating embedding...");
 
-            // ✅ FIXED: correct signature
+    
             var queryEmbedding = await embeddingGenerator.GenerateVectorAsync(
                 query,
                 options: null,
@@ -129,12 +129,10 @@ public class ProductAIService(
                     ImageUrl = result.Record.ImageUrl
                 });
 
-                // limit results
                 if (products.Count >= 3)
                     break;
             }
 
-            // 🔥 fallback if AI gives nothing
             if (products.Count == 0)
             {
                 Console.WriteLine("AI returned no results, fallback to SQL...");
@@ -147,7 +145,6 @@ public class ProductAIService(
         {
             Console.WriteLine($"AI Search failed: {ex.Message}");
 
-            // 🔥 fallback if ANY failure
             return await FallbackSearch(query, cancellationToken);
         }
     }
