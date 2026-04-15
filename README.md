@@ -7,7 +7,7 @@ Overview
 This project demonstrates a real-world backend architecture focusing on scalability, separation of concerns, and cloud-native design.
 
 It is not a simple CRUD application. It showcases:
-
+ 
 Microservices with independent data stores 
 Distributed system orchestration
 Containerized infrastructure
