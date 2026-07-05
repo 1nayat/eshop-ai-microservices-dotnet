@@ -2,7 +2,7 @@ EShop Microservices Platform (.NET Aspire + GenAI)
 
 A modern distributed e-commerce backend built using .NET 8, Aspire, and microservices architecture, enhanced with AI-powered semantic product search using vector embeddings (Qdrant).
 
-Overview
+Overview 
 
 This project demonstrates a real-world backend architecture focusing on scalability, separation of concerns, and cloud-native design.
 
