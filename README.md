@@ -66,7 +66,7 @@ Setup
 git clone https://github.com/your-username/eshop-microservices-dotnet-aspire.git
 cd eshop-microservices-dotnet-aspire
 Run the Application
-dotnet run --project AppHost
+dotnet run --project AppHost 
 
 This will:
 
